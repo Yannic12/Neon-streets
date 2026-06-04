@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Neon Streets</title>
+<style>
+html,body{
+  margin:0;
+  overflow:hidden;
+  background:#050713;
+  font-family:Arial,sans-serif;
+  color:white;
+  touch-action:none;
+}
+canvas{
+  display:block;
+  background:#050713;
+}
+#ui{
+  position:fixed;
+  top:10px;
+  left:10px;
+  right:10px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  z-index:2;
+  font-size:18px;
+}
+button{
+  border:0;
+  border-radius:14px;
+  padding:12px 16px;
+  font-size:18px;
+  background:#1f6fff;
+  color:white;
+  box-shadow:0 0 14px #1f6fff;
+}
+#controls{
+  position:fixed;
+  bottom:20px;
+  left:0;
+  right:0;
+  display:flex;
+  justify-content:space-between;
+  padding:0 20px;
+  z-index:2;
+}
+.pad button{
+  width:64px;
+  height:64px;
+  margin:4px;
+  font-size:26px;
+}
+#overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.75);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  z-index:3;
+}
+.card{
+  background:#111827;
+  border:2px solid #38bdf8;
+  border-radius:24px;
+  padding:28px;
+  box-shadow:0 0 35px #38bdf8;
+}
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div>💰 <span id="score">0</span> &nbsp; 🚨 <span id="wanted">0</span></div>
+  <button onclick="togglePause()">Pauze</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<div id="controls">
+  <div class="pad">
+    <button ontouchstart="keys.left=true" ontouchend="keys.left=false">⬅️</button>
+    <button ontouchstart="keys.right=true" ontouchend="keys.right=false">➡️</button>
+  </div>
+  <div class="pad">
+    <button ontouchstart="keys.up=true" ontouchend="keys.up=false">⬆️</button>
+    <button ontouchstart="keys.down=true" ontouchend="keys.down=false">⬇️</button>
+  </div>
+</div>
+
+<div id="overlay">
+  <div class="card">
+    <h1 id="title">Gepauzeerd</h1>
+    <p id="text">Tik op doorgaan om verder te spelen.</p>
+    <button onclick="togglePause()">Doorgaan</button>
+    <button onclick="restart()">Opnieuw</button>
+  </div>
+</div>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+function resize(){
+  canvas.width=innerWidth;
+  canvas.height=innerHeight;
+}
+resize();
+addEventListener("resize",resize);
+
+const keys={up:false,down:false,left:false,right:false};
+let paused=false;
+let gameOver=false;
+let score=0;
+let wanted=0;
+
+const world={w:2600,h:2600};
+
+const player={
+  x:1300,y:1300,
+  angle:0,
+  speed:0,
+  max:6
+};
+
+const police=[
+  {x:500,y:500,speed:2.1},
+  {x:2200,y:600,speed:2.3},
+  {x:800,y:2200,speed:2.2}
+];
+
+let coins=[];
+for(let i=0;i<40;i++){
+  coins.push({
+    x:Math.random()*world.w,
+    y:Math.random()*world.h,
+    taken:false
+  });
+}
+
+const buildings=[];
+for(let i=0;i<90;i++){
+  buildings.push({
+    x:Math.random()*world.w,
+    y:Math.random()*world.h,
+    w:80+Math.random()*160,
+    h:80+Math.random()*160
+  });
+}
+
+function togglePause(){
+  if(gameOver)return;
+  paused=!paused;
+  document.getElementById("overlay").style.display=paused?"flex":"none";
+  document.getElementById("title").innerText="Gepauzeerd";
+  document.getElementById("text").innerText="Tik op doorgaan om verder te spelen.";
+}
+
+function restart(){
+  location.reload();
+}
+
+function update(){
+  if(paused||gameOver)return;
+
+  if(keys.up) player.speed+=0.18;
+  if(keys.down) player.speed-=0.16;
+
+  player.speed*=0.96;
+  player.speed=Math.max(-3,Math.min(player.max,player.speed));
+
+  if(keys.left) player.angle-=0.055;
+  if(keys.right) player.angle+=0.055;
+
+  player.x+=Math.cos(player.angle)*player.speed;
+  player.y+=Math.sin(player.angle)*player.speed;
+
+  player.x=Math.max(40,Math.min(world.w-40,player.x));
+  player.y=Math.max(40,Math.min(world.h-40,player.y));
+
+  coins.forEach(c=>{
+    if(!c.taken && dist(player,c)<45){
+      c.taken=true;
+      score+=100;
+      wanted=Math.min(5,wanted+1);
+      document.getElementById("score").innerText=score;
+      document.getElementById("wanted").innerText=wanted;
+    }
+  });
+
+  police.forEach(p=>{
+    let dx=player.x-p.x;
+    let dy=player.y-p.y;
+    let d=Math.hypot(dx,dy);
+    p.x+=dx/d*(p.speed+wanted*.25);
+    p.y+=dy/d*(p.speed+wanted*.25);
+
+    if(d<45){
+      endGame();
+    }
+  });
+}
+
+function endGame(){
+  gameOver=true;
+  document.getElementById("overlay").style.display="flex";
+  document.getElementById("title").innerText="Game Over";
+  document.getElementById("text").innerText="Je score: "+score;
+}
+
+function dist(a,b){
+  return Math.hypot(a.x-b.x,a.y-b.y);
+}
+
+function cam(){
+  return {
+    x:player.x-canvas.width/2,
+    y:player.y-canvas.height/2
+  };
+}
+
+function draw(){
+  const c=cam();
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  drawRoads(c);
+  drawBuildings(c);
+  drawCoins(c);
+  drawCar(player.x-c.x,player.y-c.y,player.angle,"#38bdf8","#ffffff");
+
+  police.forEach(p=>{
+    const ang=Math.atan2(player.y-p.y,player.x-p.x);
+    drawCar(p.x-c.x,p.y-c.y,ang,"#ef4444","#60a5fa");
+  });
+
+  ctx.strokeStyle="#38bdf8";
+  ctx.lineWidth=6;
+  ctx.strokeRect(-c.x,-c.y,world.w,world.h);
+}
+
+function drawRoads(c){
+  ctx.fillStyle="#111827";
+  ctx.fillRect(-c.x,-c.y,world.w,world.h);
+
+  ctx.strokeStyle="#2dd4bf";
+  ctx.lineWidth=44;
+
+  for(let x=200;x<world.w;x+=300){
+    ctx.beginPath();
+    ctx.moveTo(x-c.x,0-c.y);
+    ctx.lineTo(x-c.x,world.h-c.y);
+    ctx.stroke();
+  }
+
+  for(let y=200;y<world.h;y+=300){
+    ctx.beginPath();
+    ctx.moveTo(0-c.x,y-c.y);
+    ctx.lineTo(world.w-c.x,y-c.y);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle="#020617";
+  ctx.lineWidth=34;
+
+  for(let x=200;x<world.w;x+=300){
+    ctx.beginPath();
+    ctx.moveTo(x-c.x,0-c.y);
+    ctx.lineTo(x-c.x,world.h-c.y);
+    ctx.stroke();
+  }
+
+  for(let y=200;y<world.h;y+=300){
+    ctx.beginPath();
+    ctx.moveTo(0-c.x,y-c.y);
+    ctx.lineTo(world.w-c.x,y-c.y);
+    ctx.stroke();
+  }
+}
+
+function drawBuildings(c){
+  buildings.forEach(b=>{
+    ctx.fillStyle="#172554";
+    ctx.fillRect(b.x-c.x,b.y-c.y,b.w,b.h);
+
+    ctx.strokeStyle="#7c3aed";
+    ctx.lineWidth=3;
+    ctx.strokeRect(b.x-c.x,b.y-c.y,b.w,b.h);
+
+    ctx.fillStyle="rgba(255,255,255,.18)";
+    for(let x=12;x<b.w-10;x+=28){
+      for(let y=12;y<b.h-10;y+=28){
+        ctx.fillRect(b.x+x-c.x,b.y+y-c.y,10,10);
+      }
+    }
+  });
+}
+
+function drawCoins(c){
+  coins.forEach(co=>{
+    if(co.taken)return;
+    const x=co.x-c.x;
+    const y=co.y-c.y;
+
+    ctx.beginPath();
+    ctx.fillStyle="#facc15";
+    ctx.arc(x,y,14,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.strokeStyle="#fff7aa";
+    ctx.lineWidth=4;
+    ctx.stroke();
+  });
+}
+
+function drawCar(x,y,a,color,windowColor){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(a);
+
+  ctx.shadowColor=color;
+  ctx.shadowBlur=18;
+
+  ctx.fillStyle=color;
+  ctx.roundRect(-28,-16,56,32,8);
+  ctx.fill();
+
+  ctx.fillStyle=windowColor;
+  ctx.fillRect(0,-10,16,20);
+
+  ctx.fillStyle="#020617";
+  ctx.fillRect(-22,-20,14,6);
+  ctx.fillRect(-22,14,14,6);
+  ctx.fillRect(10,-20,14,6);
+  ctx.fillRect(10,14,14,6);
+
+  ctx.restore();
+}
+
+CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+  this.beginPath();
+  this.moveTo(x+r,y);
+  this.lineTo(x+w-r,y);
+  this.quadraticCurveTo(x+w,y,x+w,y+r);
+  this.lineTo(x+w,y+h-r);
+  this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  this.lineTo(x+r,y+h);
+  this.quadraticCurveTo(x,y+h,x,y+h-r);
+  this.lineTo(x,y+r);
+  this.quadraticCurveTo(x,y,x+r,y);
+  this.closePath();
+};
+
+addEventListener("keydown",e=>{
+  if(e.key==="ArrowUp")keys.up=true;
+  if(e.key==="ArrowDown")keys.down=true;
+  if(e.key==="ArrowLeft")keys.left=true;
+  if(e.key==="ArrowRight")keys.right=true;
+  if(e.key===" ")togglePause();
+});
+
+addEventListener("keyup",e=>{
+  if(e.key==="ArrowUp")keys.up=false;
+  if(e.key==="ArrowDown")keys.down=false;
+  if(e.key==="ArrowLeft")keys.left=false;
+  if(e.key==="ArrowRight")keys.right=false;
+});
+
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+
+</body>
+</html>
